@@ -587,7 +587,7 @@ html[dir=rtl] .tile,html[dir=rtl] .stat{text-align:right}
         <span><i style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#f97316;vertical-align:middle"></i> 3-4 reports</span>
         <span><i style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#dc2626;vertical-align:middle"></i> 5+ reports</span>
       </div>
-      <h3 style="margin-top:.6rem">Areas with the most garbage</h3>
+      <h3 style="margin-top:.6rem">Areas where garbage is spreading most</h3>
       <div id="hotRank" style="margin-top:.4rem"></div>
     </div>
   </section>
@@ -2816,33 +2816,53 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 
   // ---------- 2) hotspot map ----------
   let hm=null,hotLayer=null,liveLayer=null;
+  function areaName(r){
+    let a=String(r.location||"").split(" | ")[0].replace(/,?\s*Sindh\s*$/i,"").trim();
+    return a||String(r.city||"").trim();
+  }
   function points(){
     const P=[];
-    const add=(la,ln,city)=>{la=+la;ln=+ln;if(Number.isFinite(la)&&Number.isFinite(ln)&&la>=23&&la<=29.5&&ln>=65&&ln<=72)P.push({lat:la,lng:ln,city:city});};
-    try{getReports().forEach(r=>{if((r.status||"pending")==="resolved"||r.lat==null||r.lng==null)return;add(r.lat,r.lng,r.city);});}catch(e){}
-    try{getLive().forEach(x=>add(x.lat,x.lng,""));}catch(e){}
+    const add=(la,ln,area,city)=>{la=+la;ln=+ln;if(Number.isFinite(la)&&Number.isFinite(ln)&&la>=23&&la<=29.5&&ln>=65&&ln<=72)P.push({lat:la,lng:ln,area:area,city:city});};
+    try{getReports().forEach(r=>{if((r.status||"pending")==="resolved"||r.lat==null||r.lng==null)return;add(r.lat,r.lng,areaName(r),r.city);});}catch(e){}
+    try{getLive().forEach(x=>add(x.lat,x.lng,"",""));}catch(e){}
     return P;
+  }
+  const cityOf=(la,ln,fb)=>{try{const n=nearestCity(la,ln);if(n)return n.n;}catch(e){}return fb||"";};
+  function hotStyle(){
+    if(document.getElementById("hotLblCss"))return;
+    const st=document.createElement("style");st.id="hotLblCss";
+    st.textContent=".hot-lbl{background:rgba(255,255,255,.92);border:1px solid #cbd5d0;border-radius:8px;padding:2px 7px;font-weight:700;font-size:11px;color:#10231c;box-shadow:0 1px 4px rgba(0,0,0,.25)}.hot-lbl:before{display:none}.hot-rk{cursor:pointer}.hot-rk:hover{background:var(--brand-l)}";
+    document.head.appendChild(st);
   }
   function drawHot(){
     if(!hm||!hotLayer)return;
-    hotLayer.clearLayers();
-    const P=points(),G={},C={};
+    hotStyle();hotLayer.clearLayers();
+    const P=points(),G={},A={};
     P.forEach(p=>{
-      const k=Math.round(p.lat/.02)+","+Math.round(p.lng/.02),c=G[k]||(G[k]={n:0,la:0,ln:0});
+      const k=Math.round(p.lat/.02)+","+Math.round(p.lng/.02),c=G[k]||(G[k]={n:0,la:0,ln:0,areas:{}});
       c.n++;c.la+=p.lat;c.ln+=p.lng;
-      let nm="";try{const n=nearestCity(p.lat,p.lng);nm=n?n.n:"";}catch(e){}
-      nm=nm||p.city||"Other area";C[nm]=(C[nm]||0)+1;
+      const nm=p.area||("Near "+(cityOf(p.lat,p.lng,p.city)||"Sindh"));
+      c.areas[nm]=(c.areas[nm]||0)+1;
+      const ak=nm.toLowerCase(),a=A[ak]||(A[ak]={name:nm,n:0,la:0,ln:0});
+      a.n++;a.la+=p.lat;a.ln+=p.lng;
     });
-    const cells=Object.values(G);
-    cells.forEach(c=>{
+    const cells=Object.values(G).sort((x,y)=>y.n-x.n);
+    cells.forEach((c,i)=>{
       const la=c.la/c.n,ln=c.ln/c.n,col=c.n>=5?"#dc2626":c.n>=3?"#f97316":"#f59e0b";
-      let nm="";try{const n=nearestCity(la,ln);nm=n?n.n:"";}catch(e){}
-      L.circle([la,ln],{radius:Math.min(4000,500+350*c.n),color:col,weight:1,fillColor:col,fillOpacity:.42})
-        .bindPopup("<b>"+c.n+" garbage "+(c.n===1?"report":"reports")+"</b>"+(nm?"<br>near "+esc(nm):"")).addTo(hotLayer);
+      const al=Object.entries(c.areas).sort((x,y)=>y[1]-x[1]),label=al[0][0],city=cityOf(la,ln,"");
+      const list=al.slice(0,5).map(x=>"\u2022 "+esc(x[0])+" ("+x[1]+")").join("<br>");
+      const circ=L.circle([la,ln],{radius:Math.min(4000,500+350*c.n),color:col,weight:2,fillColor:col,fillOpacity:.42})
+        .bindPopup('<b>'+esc(label)+'</b>'+(city&&!/^Near /.test(label)?' \u00b7 '+esc(city):'')+'<br><b style="color:'+col+'">'+c.n+' garbage '+(c.n===1?'report':'reports')+' here</b><br><span style="font-size:.85em">Garbage is spreading in:</span><br>'+list).addTo(hotLayer);
+      if(c.n>=3||i<3)circ.bindTooltip(esc(label)+" ("+c.n+")",{permanent:true,direction:"center",className:"hot-lbl"});
     });
-    if(cells.length){try{hm.fitBounds(L.latLngBounds(cells.map(c=>[c.la/c.n,c.ln/c.n])).pad(.4),{maxZoom:11});}catch(e){}}
-    const rk=Object.entries(C).sort((a,b)=>b[1]-a[1]).slice(0,6),top=rk.length?rk[0][1]:1,box=g("hotRank");
-    box.innerHTML=rk.length?rk.map((x,i)=>'<div style="margin:.35rem 0"><div style="display:flex;justify-content:space-between;font-size:.88rem"><span><b>'+(i+1)+'.</b> '+esc(x[0])+'</span><b>'+x[1]+'</b></div><div style="height:8px;background:var(--line);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+Math.round(x[1]/top*100)+'%;background:'+(i===0?"#dc2626":i<3?"#f97316":"#f59e0b")+'"></div></div></div>').join(""):'<p class="muted">No unresolved garbage reports yet.</p>';
+    if(cells.length){try{hm.fitBounds(L.latLngBounds(cells.map(c=>[c.la/c.n,c.ln/c.n])).pad(.4),{maxZoom:12});}catch(e){}}
+    const rk=Object.values(A).sort((x,y)=>y.n-x.n).slice(0,8),top=rk.length?rk[0].n:1,box=g("hotRank");
+    let tb=g("hotTop");
+    if(!tb){tb=document.createElement("div");tb.id="hotTop";tb.style.cssText="background:#fee2e2;color:#991b1b;border-radius:12px;padding:.7rem .9rem;margin-bottom:.7rem;font-size:.92rem;font-weight:600";g("hotMap").parentNode.insertBefore(tb,g("hotMap"));}
+    tb.style.display=rk.length?"block":"none";
+    if(rk.length){const t=rk[0];tb.innerHTML='\u{1F525} Most garbage is spreading in <b>'+esc(t.name)+'</b>'+(cityOf(t.la/t.n,t.ln/t.n,"")&&!/^Near /.test(t.name)?' ('+esc(cityOf(t.la/t.n,t.ln/t.n,""))+')':'')+' \u2014 '+t.n+' unresolved '+(t.n===1?'report':'reports')+'. Tap an area below to see it on the map.';}
+    box.innerHTML=rk.length?rk.map((x,i)=>'<div class="hot-rk" data-la="'+(x.la/x.n)+'" data-ln="'+(x.ln/x.n)+'" style="margin:.2rem 0;padding:.35rem .4rem;border-radius:10px"><div style="display:flex;justify-content:space-between;font-size:.9rem;gap:.5rem"><span><b>'+(i+1)+'.</b> '+esc(x.name)+'</span><b>'+x.n+'</b></div><div style="height:8px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:.2rem"><div style="height:100%;width:'+Math.round(x.n/top*100)+'%;background:'+(i===0?"#dc2626":i<3?"#f97316":"#f59e0b")+'"></div></div></div>').join(""):'<p class="muted">No unresolved garbage reports yet.</p>';
+    box.querySelectorAll(".hot-rk").forEach(el=>el.onclick=()=>{hm.setView([+el.dataset.la,+el.dataset.ln],14);g("hotMap").scrollIntoView({behavior:"smooth",block:"center"});});
   }
   function drawLiveDots(){
     if(!hm||!liveLayer)return;
