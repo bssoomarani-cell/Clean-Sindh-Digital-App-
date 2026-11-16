@@ -374,6 +374,7 @@ html[dir=rtl] .tile,html[dir=rtl] .stat{text-align:right}
   <div class="nav-group">Citizens</div>
   <button class="nav-btn active" data-screen="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
   <button class="nav-btn" data-screen="report"><svg class="ic"><use href="#i-plus"/></svg>Report</button>
+  <button class="nav-btn" data-screen="detector"><svg class="ic"><use href="#i-search"/></svg>Waste Detector</button>
   <button class="nav-btn" data-screen="camera"><svg class="ic"><use href="#i-cam"/></svg>Live Camera<span class="live-dot"></span></button>
   <button class="nav-btn" data-screen="map"><svg class="ic"><use href="#i-map"/></svg>Map</button>
   <button class="nav-btn" data-screen="track"><svg class="ic"><use href="#i-search"/></svg>Track</button>
@@ -385,6 +386,7 @@ html[dir=rtl] .tile,html[dir=rtl] .stat{text-align:right}
   <button class="nav-btn" data-screen="inprogress"><svg class="ic"><use href="#i-loop"/></svg>In Progress</button>
   <button class="nav-btn" data-screen="resolved"><svg class="ic"><use href="#i-check"/></svg>Resolved</button>
   <div class="nav-group">Insights</div>
+  <button class="nav-btn" data-screen="hotspots"><svg class="ic"><use href="#i-pin"/></svg>Garbage Hotspots</button>
   <button class="nav-btn" data-screen="progress"><svg class="ic"><use href="#i-bars"/></svg>Monthly Progress</button>
   <button class="nav-btn" data-screen="records"><svg class="ic"><use href="#i-file"/></svg>Records</button>
   <button class="nav-btn" data-screen="awareness"><svg class="ic"><use href="#i-book"/></svg>Awareness</button>
@@ -430,6 +432,8 @@ html[dir=rtl] .tile,html[dir=rtl] .stat{text-align:right}
       <button class="tile t-map go" data-go="map"><span class="ti"><svg class="ic"><use href="#i-map"/></svg></span><div><b>Garbage map</b><span>Street &amp; satellite, collection centres</span></div></button>
       <button class="tile go" data-go="nation"><span class="ti"><svg class="ic"><use href="#i-pin"/></svg></span><div><b>Nation Community</b><span>Share garbage info, it reaches Municipal</span></div></button>
       <button class="tile t-map go" data-go="municipal"><span class="ti"><svg class="ic"><use href="#i-shield"/></svg></span><div><b>Municipal Community</b><span>Receive, act on and solve reports</span></div></button>
+      <button class="tile go" data-go="detector"><span class="ti"><svg class="ic"><use href="#i-search"/></svg></span><div><b>Waste Detector</b><span>Is it for Municipal or can Nation clean it?</span></div></button>
+      <button class="tile t-map go" data-go="hotspots"><span class="ti"><svg class="ic"><use href="#i-pin"/></svg></span><div><b>Garbage hotspots</b><span>Which areas have the most garbage</span></div></button>
       <button class="tile go" data-go="track"><span class="ti"><svg class="ic"><use href="#i-search"/></svg></span><div><b>Track complaints</b><span>See the status of your reports</span></div></button>
       <button class="tile t-rec go" data-go="records"><span class="ti"><svg class="ic"><use href="#i-file"/></svg></span><div><b>Records</b><span>Monthly register, CSV and print</span></div></button>
       <button class="tile go" data-go="awareness"><span class="ti"><svg class="ic"><use href="#i-book"/></svg></span><div><b>Awareness</b><span>Recycling tips and campaigns</span></div></button>
@@ -505,6 +509,33 @@ html[dir=rtl] .tile,html[dir=rtl] .stat{text-align:right}
     </form>
   </section>
 
+  <!-- WASTE DETECTOR -->
+  <section id="detector" class="screen">
+    <div class="page-head"><h2>Waste Detector</h2><p>Take or choose a photo. The detector looks for waste, then tells you who should clean it: the Municipal Community or the Nation Community.</p></div>
+    <div class="cam-layout">
+      <div class="card">
+        <h3>1. Add a photo</h3>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.4rem 0 .7rem">
+          <button type="button" class="btn" id="wdCamBtn">&#128247; Take photo</button>
+          <button type="button" class="btn btn-ghost" id="wdPickBtn">&#128444;&#65039; Choose photo</button>
+        </div>
+        <input type="file" id="wdCam" accept="image/*" capture="environment" hidden>
+        <input type="file" id="wdPick" accept="image/*" hidden>
+        <div id="wdPrevWrap" style="display:none"><canvas id="wdCanvas" style="width:100%;border-radius:12px;background:#101010;display:block"></canvas></div>
+        <p class="cs-note" id="wdHint" style="margin-top:.5rem">The photo is checked on your phone. It is not uploaded.</p>
+        <h3 style="margin-top:.9rem">2. Tell us more (optional)</h3>
+        <p class="cs-note" style="margin-bottom:.3rem">A photo cannot show everything. Tick what applies.</p>
+        <label class="wd-chip"><input type="checkbox" id="wdHaz"> &#9888;&#65039; Hazardous, medical, sewage or a dead animal</label>
+        <label class="wd-chip"><input type="checkbox" id="wdBulky"> &#128715;&#65039; Bulky or heavy items (furniture, tyres, rubble)</label>
+        <label class="wd-chip"><input type="checkbox" id="wdBig"> &#128230; The pile is too big to carry by hand</label>
+      </div>
+      <div class="card">
+        <h3>Result</h3>
+        <div id="wdResult"><p class="muted">Add a photo and the result will appear here.</p></div>
+      </div>
+    </div>
+  </section>
+
   <!-- LIVE CAMERA -->
   <section id="camera" class="screen">
     <div class="page-head"><h2>Live Camera <span class="live-chip"><b></b>LIVE</span></h2><p>Open your camera, show the garbage, and post a live sighting. It appears on the map with its time and GPS location so the community can see where garbage is right now.</p></div>
@@ -536,6 +567,28 @@ html[dir=rtl] .tile,html[dir=rtl] .stat{text-align:right}
         <p class="cs-note" style="margin-bottom:.8rem">Latest live sightings and complaints with photos. Tap one to see it on the map.</p>
         <div id="liveFeed" class="cs-feed"></div>
       </div>
+    </div>
+    <div class="card" id="pubLiveCard">
+      <h3>&#128308; Live streams now</h3>
+      <p class="cs-note" style="margin-bottom:.7rem">Anyone who starts the live camera is streamed here in real time. Tap <b>Watch live</b> to see the video.</p>
+      <div id="pubLive"><p class="muted">Looking for live cameras&hellip;</p></div>
+    </div>
+  </section>
+
+  <!-- GARBAGE HOTSPOTS -->
+  <section id="hotspots" class="screen">
+    <div class="page-head"><h2>Garbage Hotspots</h2><p>See which areas of Sindh have the most garbage. It is counted from unresolved reports and live sightings.</p></div>
+    <div class="card" id="hotCard">
+      <h3>&#128293; Garbage hotspot map</h3>
+      <p class="cs-note" style="margin-bottom:.7rem">Bigger, redder circles mean more unresolved garbage reports and live sightings in that area. Red pulsing dots are cameras streaming live right now.</p>
+      <div id="hotMap" style="height:340px;border-radius:12px;border:1.5px solid var(--line);overflow:hidden;z-index:1"></div>
+      <div style="display:flex;gap:.9rem;flex-wrap:wrap;font-size:.8rem;margin:.55rem 0" class="muted">
+        <span><i style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#f59e0b;vertical-align:middle"></i> 1-2 reports</span>
+        <span><i style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#f97316;vertical-align:middle"></i> 3-4 reports</span>
+        <span><i style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#dc2626;vertical-align:middle"></i> 5+ reports</span>
+      </div>
+      <h3 style="margin-top:.6rem">Areas with the most garbage</h3>
+      <div id="hotRank" style="margin-top:.4rem"></div>
     </div>
   </section>
 
@@ -677,6 +730,9 @@ html[dir=rtl] .tile,html[dir=rtl] .stat{text-align:right}
         <h3>Share garbage info</h3>
         <label for="natName">Your name (optional)</label><input id="natName" type="text">
         <label for="natCity">City</label><select id="natCity"></select>
+        <label>Mark the place on the map of Sindh</label>
+        <div id="natMap" style="height:280px;border-radius:12px;border:1.5px solid var(--line);overflow:hidden;z-index:1"></div>
+        <p class="cs-note" id="natMapHint" style="margin-top:.4rem">Tap the map to drop a pin on the garbage spot. Coloured dots are reports already shared.</p>
         <label for="natEmail">Your Gmail / email (required)</label><input id="natEmail" type="email" placeholder="example@gmail.com" autocomplete="email" required maxlength="254">
         <label for="natPhone">Your phone number (required)</label><input id="natPhone" type="tel" inputmode="tel" placeholder="0300 1234567" autocomplete="tel" required maxlength="20">
         <label for="natArea">Area / street</label><input id="natArea" type="text" required>
@@ -1773,7 +1829,7 @@ $("natGps").onclick=()=>{
   const t=$("natGpsTxt");
   if(!navigator.geolocation||!window.isSecureContext){t.textContent="GPS needs the secure https:// link of the site.";return;}
   t.textContent="Getting location...";
-  navigator.geolocation.getCurrentPosition(p=>{natPos={lat:+p.coords.latitude.toFixed(6),lng:+p.coords.longitude.toFixed(6),acc:Math.round(p.coords.accuracy)};t.textContent="📍 "+natPos.lat+", "+natPos.lng+" (±"+natPos.acc+" m)";const c=nearestCity(natPos.lat,natPos.lng);if(c)$("natCity").value=c.n;},()=>{t.textContent="Could not get location. Allow Location permission and try again.";},{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+  navigator.geolocation.getCurrentPosition(p=>{natPos={lat:+p.coords.latitude.toFixed(6),lng:+p.coords.longitude.toFixed(6),acc:Math.round(p.coords.accuracy)};t.textContent="📍 "+natPos.lat+", "+natPos.lng+" (±"+natPos.acc+" m)";const c=nearestCity(natPos.lat,natPos.lng);if(c)$("natCity").value=c.n;if(window.natMapPin)window.natMapPin(natPos.lat,natPos.lng,true);},()=>{t.textContent="Could not get location. Allow Location permission and try again.";},{enableHighAccuracy:true,timeout:20000,maximumAge:0});
 };
 $("natForm").onsubmit=e=>{
   e.preventDefault();const f=$("natPhoto").files[0];if(!f){alert("Please take a photo using your camera before sending.");return;}
@@ -2628,6 +2684,463 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
   });
   document.getElementById("natCamCancel").addEventListener("click",stop);
   form.addEventListener("reset",()=>{stop();hint.textContent=HINT;prev.style.display="none";prev.removeAttribute("src");});
+})();
+</script>
+<script>
+// ===== Nation Community: map of Sindh =====
+(function(){
+  let map=null,pin=null,dots=null,street,sat,labels;
+  const COL={pending:"#d97706",inprogress:"#2563eb",resolved:"#16a34a"};
+  const g=id=>document.getElementById(id);
+  function init(){
+    const el=g("natMap");
+    if(!el||!window.L)return;
+    if(!map){
+      map=L.map(el,{minZoom:6,maxZoom:19,worldCopyJump:true}).setView([26.2,68.2],7);
+      map.setMaxBounds([[22.5,64.5],[29.7,72.5]]);
+      street=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap contributors",maxZoom:19}).addTo(map);
+      sat=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{attribution:"Tiles &copy; Esri",maxZoom:19});
+      labels=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",{maxZoom:19});
+      L.control.layers({"Street":street,"Satellite":L.layerGroup([sat,labels])},null,{collapsed:true}).addTo(map);
+      dots=L.layerGroup().addTo(map);
+      map.on("click",e=>setPin(e.latlng.lat,e.latlng.lng,false));
+      const sel=g("natCity");
+      if(sel)sel.addEventListener("change",()=>{
+        const c=(window.SINDH||SINDH).find(x=>x.n===sel.value);
+        if(c&&!pin)map.setView([c.lat,c.lon],11);
+      });
+      const f=g("natForm");
+      if(f)f.addEventListener("reset",()=>{if(pin){map.removeLayer(pin);pin=null;}});
+    }
+    setTimeout(()=>{map.invalidateSize();drawDots();},150);
+  }
+  function setPin(lat,lng,fromGps){
+    lat=+(+lat).toFixed(6);lng=+(+lng).toFixed(6);
+    if(!pin){pin=L.marker([lat,lng],{draggable:true}).addTo(map);
+      pin.on("dragend",()=>{const p=pin.getLatLng();setPin(p.lat,p.lng,false);});}
+    else pin.setLatLng([lat,lng]);
+    if(fromGps)map.setView([lat,lng],16);
+    natPos={lat:lat,lng:lng,acc:0};
+    const t=g("natGpsTxt");if(t)t.textContent="\ud83d\udccd "+lat+", "+lng+" (map pin)";
+    const c=nearestCity(lat,lng),sel=g("natCity");if(c&&sel)sel.value=c.n;
+  }
+  window.natMapPin=function(lat,lng,fromGps){if(!map)init();if(map)setPin(lat,lng,fromGps);};
+  function drawDots(){
+    if(!map||!dots)return;
+    dots.clearLayers();
+    let R=[];try{R=getReports().filter(r=>r.src==="nation"&&isFinite(r.lat)&&isFinite(r.lng));}catch(e){}
+    R.slice(0,100).forEach(r=>{
+      const col=COL[r.status||"pending"]||COL.pending;
+      L.circleMarker([r.lat,r.lng],{radius:7,color:"#fff",weight:2,fillColor:col,fillOpacity:.95})
+        .bindPopup("<b>"+String(r.location||r.city||"Report").split(" | ")[0].replace(/[<>&]/g,"")+"</b><br>"+(r.status||"pending")).addTo(dots);
+    });
+  }
+  const _ss2=showScreen;
+  showScreen=function(id){const r=_ss2.apply(this,arguments);if(id==="nation")init();return r;};
+  const _ra2=refreshAll;
+  refreshAll=function(){const r=_ra2.apply(this,arguments);drawDots();return r;};
+})();
+</script>
+<script>
+// ===== Live streaming (public viewer) + garbage hotspot map + duplicate-photo guard =====
+(function(){
+  const g=id=>document.getElementById(id);
+  const esc=x=>String(x==null?"":x).replace(/[<>&"']/g,"");
+  const DB=()=>typeof CS_DB_URL==="string"?CS_DB_URL:"";
+  const dbp=(p,m,b)=>fetch(DB()+p+".json"+(window.__csToken?"?auth="+window.__csToken:""),{method:m||"GET",body:b==null?undefined:JSON.stringify(b)}).then(r=>r.json()).catch(()=>null);
+  const ICE={iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun1.l.google.com:19302"}]};
+  const gathered=pc=>new Promise(res=>{if(pc.iceGatheringState==="complete")return res();const t=setTimeout(res,4000);pc.addEventListener("icegatheringstatechange",()=>{if(pc.iceGatheringState==="complete"){clearTimeout(t);res();}});});
+  const onCamera=()=>["camera","hotspots"].some(i=>{const c=g(i);return !!(c&&c.classList.contains("active"));});
+
+  // ---------- 1) public live viewer ----------
+  const V={};          // sid -> {el,img,vid,st,loc,pc}
+  let liveList=[];
+  async function watch(sid){
+    const w=V[sid];if(!w||w.pc)return;
+    w.st.textContent="Connecting to the live video\u2026";
+    try{
+      const pc=w.pc=new RTCPeerConnection(ICE),vid="p"+Date.now()+Math.random().toString(36).slice(2,5);
+      pc.addTransceiver("video",{direction:"recvonly"});
+      pc.ontrack=e=>{w.vid.srcObject=e.streams[0];w.vid.style.display="block";w.img.style.display="none";w.vid.play().catch(()=>{});w.st.textContent="\u{1F534} LIVE video";w.btn.textContent="Stop watching";};
+      await pc.setLocalDescription(await pc.createOffer());await gathered(pc);
+      await dbp("/livesig/"+sid+"/"+vid+"/offer","PUT",pc.localDescription.sdp);
+      for(let i=0;i<20;i++){
+        await new Promise(r=>setTimeout(r,1500));
+        if(!V[sid]||V[sid].pc!==pc)return;
+        const a=await dbp("/livesig/"+sid+"/"+vid+"/answer");
+        if(a){await pc.setRemoteDescription({type:"answer",sdp:a});return;}
+      }
+      w.st.textContent="Could not open the live video on this network. The picture refreshes every few seconds instead.";
+      try{pc.close();}catch(_){}w.pc=null;
+    }catch(_){w.st.textContent="Could not open the live video. The picture refreshes every few seconds instead.";w.pc=null;}
+  }
+  function unwatch(sid){
+    const w=V[sid];if(!w)return;
+    if(w.pc){try{w.pc.close();}catch(_){}w.pc=null;}
+    w.vid.pause();w.vid.srcObject=null;w.vid.style.display="none";w.img.style.display="block";
+    w.st.textContent="\u{1F534} Camera is on";w.btn.textContent="Watch live";
+  }
+  async function pollLive(){
+    const box=g("pubLive");if(!box)return;
+    if(!DB()){
+      box.innerHTML='<p class="muted">Live streaming needs the shared database. Put your Firebase Realtime Database URL in <b>CS_CONFIG.dbUrl</b> at the top of index.html, then streams from every phone will appear here.</p>';
+      liveList=[];drawLiveDots();return;
+    }
+    if(!onCamera())return;
+    const all=await dbp("/livecams")||{},now=Date.now();
+    liveList=Object.values(all).filter(c=>c&&c.id&&now-c.hb<20000);
+    if(!box.querySelector(".pl-grid")){
+      box.innerHTML='<div class="pl-empty muted">Nobody is streaming right now. Start your live camera above to stream.</div><div class="pl-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.8rem"></div>';
+    }
+    const grid=box.querySelector(".pl-grid"),emp=box.querySelector(".pl-empty");
+    emp.style.display=liveList.length?"none":"block";
+    Object.keys(V).forEach(id=>{if(!liveList.find(c=>c.id===id)){if(V[id].pc)try{V[id].pc.close();}catch(_){}V[id].el.remove();delete V[id];}});
+    liveList.forEach(c=>{
+      let w=V[c.id];
+      if(!w){
+        const el=document.createElement("div");
+        el.style.cssText="border:1px solid var(--line);border-radius:14px;padding:.6rem;background:#fff";
+        el.innerHTML='<div style="position:relative;background:#101010;border-radius:10px;overflow:hidden;aspect-ratio:4/3"><img alt="live camera" style="width:100%;height:100%;object-fit:cover;display:block"><video playsinline autoplay muted controls style="display:none;width:100%;height:100%;object-fit:cover"></video></div><div class="st" style="font-size:.8rem;font-weight:700;margin-top:.45rem"></div><div class="lc muted" style="font-size:.78rem"></div><button type="button" class="btn btn-block" style="margin-top:.5rem;min-height:38px;padding:.5rem">Watch live</button>';
+        grid.appendChild(el);
+        w=V[c.id]={el:el,img:el.querySelector("img"),vid:el.querySelector("video"),st:el.querySelector(".st"),loc:el.querySelector(".lc"),btn:el.querySelector("button"),pc:null};
+        w.st.textContent="\u{1F534} Camera is on";
+        w.btn.onclick=()=>{V[c.id].pc?unwatch(c.id):watch(c.id);};
+      }
+      if(c.frame&&w.img.style.display!=="none")w.img.src=c.frame;
+      w.loc.textContent=c.lat!=null?"GPS "+(+c.lat).toFixed(4)+", "+(+c.lng).toFixed(4):"";
+    });
+    drawLiveDots();
+  }
+  setInterval(pollLive,4000);
+  window.addEventListener("pagehide",()=>{Object.keys(V).forEach(unwatch);});
+
+  // ---------- 2) hotspot map ----------
+  let hm=null,hotLayer=null,liveLayer=null;
+  function points(){
+    const P=[];
+    const add=(la,ln,city)=>{la=+la;ln=+ln;if(Number.isFinite(la)&&Number.isFinite(ln)&&la>=23&&la<=29.5&&ln>=65&&ln<=72)P.push({lat:la,lng:ln,city:city});};
+    try{getReports().forEach(r=>{if((r.status||"pending")==="resolved"||r.lat==null||r.lng==null)return;add(r.lat,r.lng,r.city);});}catch(e){}
+    try{getLive().forEach(x=>add(x.lat,x.lng,""));}catch(e){}
+    return P;
+  }
+  function drawHot(){
+    if(!hm||!hotLayer)return;
+    hotLayer.clearLayers();
+    const P=points(),G={},C={};
+    P.forEach(p=>{
+      const k=Math.round(p.lat/.02)+","+Math.round(p.lng/.02),c=G[k]||(G[k]={n:0,la:0,ln:0});
+      c.n++;c.la+=p.lat;c.ln+=p.lng;
+      let nm="";try{const n=nearestCity(p.lat,p.lng);nm=n?n.n:"";}catch(e){}
+      nm=nm||p.city||"Other area";C[nm]=(C[nm]||0)+1;
+    });
+    const cells=Object.values(G);
+    cells.forEach(c=>{
+      const la=c.la/c.n,ln=c.ln/c.n,col=c.n>=5?"#dc2626":c.n>=3?"#f97316":"#f59e0b";
+      let nm="";try{const n=nearestCity(la,ln);nm=n?n.n:"";}catch(e){}
+      L.circle([la,ln],{radius:Math.min(4000,500+350*c.n),color:col,weight:1,fillColor:col,fillOpacity:.42})
+        .bindPopup("<b>"+c.n+" garbage "+(c.n===1?"report":"reports")+"</b>"+(nm?"<br>near "+esc(nm):"")).addTo(hotLayer);
+    });
+    if(cells.length){try{hm.fitBounds(L.latLngBounds(cells.map(c=>[c.la/c.n,c.ln/c.n])).pad(.4),{maxZoom:11});}catch(e){}}
+    const rk=Object.entries(C).sort((a,b)=>b[1]-a[1]).slice(0,6),top=rk.length?rk[0][1]:1,box=g("hotRank");
+    box.innerHTML=rk.length?rk.map((x,i)=>'<div style="margin:.35rem 0"><div style="display:flex;justify-content:space-between;font-size:.88rem"><span><b>'+(i+1)+'.</b> '+esc(x[0])+'</span><b>'+x[1]+'</b></div><div style="height:8px;background:var(--line);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+Math.round(x[1]/top*100)+'%;background:'+(i===0?"#dc2626":i<3?"#f97316":"#f59e0b")+'"></div></div></div>').join(""):'<p class="muted">No unresolved garbage reports yet.</p>';
+  }
+  function drawLiveDots(){
+    if(!hm||!liveLayer)return;
+    liveLayer.clearLayers();
+    liveList.forEach(c=>{
+      if(c.lat==null||c.lng==null)return;
+      L.marker([c.lat,c.lng],{icon:L.divIcon({className:"",html:'<div style="width:18px;height:18px;border-radius:50%;background:#ef4444;border:3px solid #fff;box-shadow:0 0 0 0 rgba(239,68,68,.7);animation:blink 1.3s infinite"></div>',iconSize:[18,18],iconAnchor:[9,9]})})
+        .bindPopup("\u{1F534} Live camera streaming now").addTo(liveLayer);
+    });
+  }
+  function initHot(){
+    const el=g("hotMap");if(!el||!window.L)return;
+    if(!hm){
+      hm=L.map(el,{minZoom:6,maxZoom:18}).setView([26.2,68.2],7);
+      hm.setMaxBounds([[22.5,64.5],[29.7,72.5]]);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap contributors",maxZoom:19}).addTo(hm);
+      hotLayer=L.layerGroup().addTo(hm);liveLayer=L.layerGroup().addTo(hm);
+    }
+    setTimeout(()=>{hm.invalidateSize();drawHot();drawLiveDots();},150);
+  }
+  const _ssL=showScreen;
+  showScreen=function(id){const r=_ssL.apply(this,arguments);if(id==="hotspots"){initHot();pollLive();}if(id==="camera")pollLive();return r;};
+  const _raL=refreshAll;
+  refreshAll=function(){const r=_raL.apply(this,arguments);drawHot();return r;};
+
+  // ---------- 3) duplicate-photo guard (AI image fingerprint) ----------
+  const HC=new Map();
+  function loadImg(src){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=src;});}
+  function fingerprint(im){
+    const a=document.createElement("canvas");a.width=72;a.height=64;
+    const ax=a.getContext("2d");ax.imageSmoothingQuality="high";ax.drawImage(im,0,0,72,64);
+    const b=document.createElement("canvas");b.width=9;b.height=8;
+    const bx=b.getContext("2d");bx.imageSmoothingQuality="high";bx.drawImage(a,0,0,9,8);
+    const d=bx.getImageData(0,0,9,8).data,gr=i=>.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2];
+    let bits="";for(let y=0;y<8;y++)for(let x=0;x<8;x++)bits+=gr(y*9+x)>gr(y*9+x+1)?"1":"0";
+    return bits;
+  }
+  const hd=(x,y)=>{let n=0;for(let i=0;i<x.length;i++)if(x[i]!==y[i])n++;return n;};
+  async function hashOf(key,src){
+    if(HC.has(key))return HC.get(key);
+    let h=null;try{h=fingerprint(await loadImg(src));}catch(e){}
+    HC.set(key,h);return h;
+  }
+  // src: data URL or object URL of the new photo. Returns the matching earlier report / sighting, or null.
+  async function findDup(src){
+    const mine=await hashOf("new|"+src.length+"|"+src.slice(-40)+"|"+src.slice(0,60),src);
+    const pool=[];
+    try{getReports().forEach(r=>{if(r.photo)pool.push({k:"r"+r.id+"|"+r.photo.length,src:r.photo,r:r,kind:"report"});});}catch(e){}
+    try{getLive().forEach(x=>{if(x.img)pool.push({k:"l"+x.id+"|"+x.img.length,src:x.img,r:x,kind:"sighting"});});}catch(e){}
+    for(const it of pool){
+      if(it.src===src)return it;
+      if(!mine)continue;
+      const h=await hashOf(it.k,it.src);
+      if(h&&hd(mine,h)<=6)return it;
+    }
+    return null;
+  }
+  function dupAlert(it){
+    let id="";try{id=it.kind==="report"?" (ID "+recId(it.r)+")":"";}catch(e){}
+    const st={pending:"Pending",inprogress:"In progress",resolved:"Resolved"}[(it.r.status||"pending")]||"";
+    alert("\u26A0\uFE0F This report has already been submitted.\n\nThis photo matches "+(it.kind==="report"?"an existing report":"a live sighting that was already posted")+id+(it.kind==="report"&&st?", status: "+st:"")+(it.r.date?", sent "+it.r.date:"")+".\n\nYour report was NOT submitted again. You can follow the earlier one in the Track screen. If this is a different place, please take a new photo of that garbage.");
+  }
+  document.addEventListener("submit",async e=>{
+    const f=e.target;if(!f||(f.id!=="reportForm"&&f.id!=="natForm"))return;
+    if(f.dataset.dupOk){delete f.dataset.dupOk;return;}
+    e.preventDefault();e.stopImmediatePropagation();
+    if(f.dataset.dupBusy)return;f.dataset.dupBusy="1";
+    let dup=null;
+    try{
+      const inp=f.querySelector('input[type=file]'),file=inp&&inp.files&&inp.files[0];
+      if(file){
+        if(typeof cpull==="function"){try{await cpull();}catch(_){}}
+        const u=URL.createObjectURL(file);
+        try{dup=await findDup(u);}finally{URL.revokeObjectURL(u);}
+      }
+    }catch(_){}
+    delete f.dataset.dupBusy;
+    if(dup){dupAlert(dup);return;}
+    f.dataset.dupOk="1";
+    try{f.requestSubmit();}catch(_){f.dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));}
+  },true);
+  const _psL=window.postSighting;
+  if(typeof _psL==="function"){
+    window.postSighting=async function(img){
+      try{const d=await findDup(img);if(d){dupAlert(d);return;}}catch(_){}
+      return _psL.apply(this,arguments);
+    };
+  }
+})();
+</script>
+<style>
+.wd-chip{display:flex;gap:.55rem;align-items:flex-start;margin:.35rem 0;padding:.55rem .7rem;border:1.5px solid var(--line);border-radius:12px;font-weight:500;font-size:.9rem;cursor:pointer;background:#fff}
+.wd-chip input{width:20px;min-height:20px;height:20px;margin-top:.1rem;flex:none}
+.wd-verdict{border-radius:16px;padding:1rem 1.1rem;margin-bottom:.8rem;color:#fff}
+.wd-verdict h4{font-size:1.15rem;line-height:1.25;margin-bottom:.25rem}
+.wd-verdict p{font-size:.92rem;opacity:.95}
+.wd-m{background:linear-gradient(135deg,#b45309,#d97706)}
+.wd-n{background:linear-gradient(135deg,#0b5132,#14804a)}
+.wd-x{background:linear-gradient(135deg,#475569,#64748b)}
+.wd-tags{display:flex;flex-wrap:wrap;gap:.35rem;margin:.4rem 0 .7rem}
+.wd-tags span{background:var(--brand-l);color:var(--brand-d);border-radius:99px;padding:.22rem .7rem;font-size:.8rem;font-weight:700}
+#csBell{position:relative;min-width:46px;padding:.6rem .8rem}
+#csBell b{position:absolute;top:2px;right:2px;min-width:19px;height:19px;border-radius:99px;background:#ef4444;color:#fff;font-size:.7rem;display:none;align-items:center;justify-content:center;padding:0 4px}
+#csPanel{position:fixed;right:.7rem;top:calc(env(safe-area-inset-top,0px) + 64px);width:min(380px,calc(100vw - 1.4rem));max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 40px rgba(16,35,28,.25);z-index:9100;display:none}
+#csPanel .ph{display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;border-bottom:1px solid var(--line);font-weight:800;color:var(--brand-d)}
+#csPanel .ph button{background:none;border:0;color:var(--brand);font-weight:700;cursor:pointer;font-size:.8rem;margin-left:.6rem}
+#csPanel .it{padding:.7rem 1rem;border-bottom:1px solid var(--line);font-size:.88rem}
+#csPanel .it.un{background:#f0f9f3}
+#csPanel .it b{display:block;color:var(--ink)}
+#csPanel .it small{color:var(--muted)}
+#csToast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 10px);transform:translate(-50%,-140%);width:min(440px,calc(100vw - 1.2rem));background:#0b5132;color:#fff;border-radius:16px;padding:.8rem 1rem;box-shadow:0 14px 34px rgba(0,0,0,.35);z-index:9200;transition:transform .35s ease;cursor:pointer;display:flex;gap:.7rem;align-items:flex-start}
+#csToast.show{transform:translate(-50%,0)}
+#csToast .tb{flex:1;font-size:.88rem;line-height:1.35}
+#csToast .tb b{display:block;font-size:.95rem}
+</style>
+<script>
+// ===== Notification bar =====
+(function(){
+  const KEY="cs_notifs",g=id=>document.getElementById(id);
+  const esc=x=>String(x==null?"":x).replace(/[<>&"']/g,"");
+  let list=[];try{list=JSON.parse(localStorage.getItem(KEY)||"[]");}catch(e){}
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(list.slice(0,40)));}catch(e){}};
+  const born=Date.now();
+  const bell=document.createElement("button");bell.type="button";bell.id="csBell";bell.className="btn btn-ghost";bell.setAttribute("aria-label","Notifications");
+  bell.innerHTML='&#128276;<b></b>';
+  const ta=document.querySelector(".top-actions");if(ta)ta.insertBefore(bell,ta.firstChild);
+  const panel=document.createElement("div");panel.id="csPanel";document.body.appendChild(panel);
+  const toast=document.createElement("div");toast.id="csToast";document.body.appendChild(toast);
+  function ago(t){const m=Math.round((Date.now()-t)/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago";}
+  function render(){
+    const un=list.filter(n=>!n.read).length,bd=bell.querySelector("b");
+    bd.textContent=un>9?"9+":un;bd.style.display=un?"flex":"none";
+    panel.innerHTML='<div class="ph"><span>Notifications</span><span><button id="csNAll">Mark all read</button><button id="csNClr">Clear</button></span></div>'+
+      (list.length?list.map(n=>'<div class="it'+(n.read?'':' un')+'"><b>'+esc(n.title)+'</b>'+esc(n.body)+'<br><small>'+ago(n.ts)+'</small></div>').join(""):'<div class="it muted">No notifications yet. You will see a message here when a report is submitted.</div>')+
+      ('Notification' in window&&Notification.permission==="default"?'<div class="it"><button type="button" class="btn btn-block" id="csNEn" style="min-height:40px">Turn on phone notifications</button></div>':'');
+    const a=g("csNAll"),c=g("csNClr"),e=g("csNEn");
+    if(a)a.onclick=()=>{list.forEach(n=>n.read=true);save();render();};
+    if(c)c.onclick=()=>{list=[];save();render();};
+    if(e)e.onclick=()=>{Notification.requestPermission().then(render);};
+  }
+  bell.onclick=e=>{e.stopPropagation();const o=panel.style.display==="block";panel.style.display=o?"none":"block";if(!o){list.forEach(n=>n.read=true);save();render();}};
+  document.addEventListener("click",e=>{if(!e.target.closest("#csPanel")&&!e.target.closest("#csBell"))panel.style.display="none";});
+  let tt=null;
+  function beep(){try{const A=window.AudioContext||window.webkitAudioContext,c=new A(),o=c.createOscillator(),v=c.createGain();o.type="sine";o.frequency.value=880;v.gain.value=.06;o.connect(v);v.connect(c.destination);o.start();o.stop(c.currentTime+.18);setTimeout(()=>c.close(),400);}catch(e){}}
+  function push(title,body){
+    list.unshift({id:Date.now()+Math.random(),title:title,body:body,ts:Date.now(),read:false});save();render();
+    toast.innerHTML='<span style="font-size:1.4rem">&#128276;</span><div class="tb"><b>'+esc(title)+'</b>'+esc(body)+'</div>';
+    toast.classList.add("show");clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove("show"),6500);beep();
+    try{if("Notification" in window&&Notification.permission==="granted"&&document.hidden)new Notification(title,{body:body,icon:"icon-192.png"});}catch(e){}
+  }
+  toast.onclick=()=>{toast.classList.remove("show");panel.style.display="block";list.forEach(n=>n.read=true);save();render();};
+  window.csNotify=push;
+  const snap=()=>{const m=new Map();try{getReports().forEach(r=>m.set(r.id,r.status||"pending"));}catch(e){}return m;};
+  let known=snap();
+  const SL={pending:"Pending",inprogress:"In progress",resolved:"Resolved"};
+  const place=r=>String(r.location||r.city||"").split(" | ")[0].slice(0,60);
+  function check(own){
+    const now=snap();let R=[];try{R=getReports();}catch(e){}
+    R.forEach(r=>{
+      const was=known.get(r.id),st=r.status||"pending";
+      let id="";try{id=recId(r);}catch(e){}
+      if(was===undefined){
+        if(own)push("\u2705 Report submitted",id+" has been sent to the Municipal Community"+(r.src==="nation"?" from Nation Community":"")+(place(r)?" \u00b7 "+place(r):"")+". Status: Pending.");
+        else if(Date.now()-born>5000&&Date.now()-(r.ts||r.id)<15*6e4)push("\u{1F4E5} New report received",id+(place(r)?" \u00b7 "+place(r):"")+" has just been reported.");
+      }else if(was!==st&&Date.now()-born>5000){
+        push("\u{1F504} Report "+id+" updated","Status changed to "+(SL[st]||st)+(place(r)?" \u00b7 "+place(r):"")+".");
+      }
+    });
+    known=now;
+  }
+  const _sv=saveReports;
+  saveReports=function(){const r=_sv.apply(this,arguments);try{check(true);}catch(e){}return r;};
+  const _sl=saveLive;
+  saveLive=function(a){const had=new Set();try{getLive().forEach(x=>had.add(x.id));}catch(e){}const r=_sl.apply(this,arguments);try{if(a.some(x=>!had.has(x.id)))push("\u{1F4F7} Live sighting posted","Your live sighting is now on the map and in the community feed.");}catch(e){}return r;};
+  setInterval(()=>{try{check(false);}catch(e){}},5000);
+  render();
+})();
+</script>
+<script>
+// ===== Waste Detector =====
+(function(){
+  const g=id=>document.getElementById(id);
+  const WASTE=new Set(["bottle","cup","wine glass","bowl","fork","knife","spoon","handbag","backpack","umbrella","vase","book","banana","apple","orange","sandwich","donut","cake","pizza","hot dog","carrot","broccoli"]);
+  const BULKY=new Set(["couch","chair","bed","tv","refrigerator","microwave","oven","sink","toilet","bicycle","motorcycle","car","truck","bus","bench","suitcase","laptop","dining table"]);
+  let model=null,mp=null,file=null,last=null;
+  function loadScript(src){return new Promise((res,rej)=>{const e=document.createElement("script");e.src=src;e.onload=res;e.onerror=rej;document.head.appendChild(e);});}
+  function getModel(){
+    if(mp)return mp;
+    mp=(async()=>{
+      if(!window.tf)await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js");
+      if(!window.cocoSsd)await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js");
+      model=await cocoSsd.load({base:"lite_mobilenet_v2"});return model;
+    })().catch(()=>{mp=null;return null;});
+    return mp;
+  }
+  function clutter(im){
+    const W=96,H=72,c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");x.drawImage(im,0,0,W,H);
+    const d=x.getImageData(0,0,W,H).data,L=new Float32Array(W*H);
+    for(let i=0;i<W*H;i++)L[i]=.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2];
+    const B=6;let cells=0,hit=0;
+    for(let by=0;by<H-B;by+=B)for(let bx=0;bx<W-B;bx+=B){
+      let ge=0,n=0,r=0,gg=0,b=0;
+      for(let y=by;y<by+B;y++)for(let xx=bx;xx<bx+B;xx++){
+        const i=y*W+xx;ge+=Math.abs(L[i]-L[i+1])+Math.abs(L[i]-L[i+W]);n++;
+        r+=d[i*4];gg+=d[i*4+1];b+=d[i*4+2];
+      }
+      ge/=n;r/=n;gg/=n;b/=n;cells++;
+      const green=gg>r*1.12&&gg>b*1.12,sky=b>r*1.15&&b>gg*1.05&&b>140;
+      if(ge>16&&!green&&!sky)hit++;
+    }
+    return hit/cells;
+  }
+  function drawPrev(im,dets){
+    const cv=g("wdCanvas"),W=Math.min(640,im.naturalWidth),k=W/im.naturalWidth;
+    cv.width=W;cv.height=Math.round(im.naturalHeight*k);const x=cv.getContext("2d");x.drawImage(im,0,0,cv.width,cv.height);
+    x.lineWidth=3;x.font="bold 14px system-ui";
+    (dets||[]).forEach(d=>{
+      const w=WASTE.has(d.class),bk=BULKY.has(d.class);if(!w&&!bk)return;
+      x.strokeStyle=bk?"#f59e0b":"#22c55e";x.fillStyle=x.strokeStyle;
+      const [bx,by,bw,bh]=d.bbox.map(v=>v*k);x.strokeRect(bx,by,bw,bh);
+      x.fillRect(bx,Math.max(0,by-18),x.measureText(d.class).width+10,18);x.fillStyle="#000";x.fillText(d.class,bx+5,Math.max(13,by-4));
+    });
+    g("wdPrevWrap").style.display="block";
+  }
+  function decide(a){
+    const haz=g("wdHaz").checked,bk=g("wdBulky").checked,big=g("wdBig").checked;
+    const reasons=[];
+    if(a.bulky.length)reasons.push("bulky items found ("+a.bulky.join(", ")+")");
+    if(haz)reasons.push("hazardous, medical, sewage or dead-animal waste");
+    if(bk)reasons.push("bulky or heavy items");
+    if(big)reasons.push("a pile too big to carry");
+    if(a.cov>=.38)reasons.push("a large area of the photo is covered in waste");
+    if(a.waste>=8)reasons.push(a.waste+" waste items in one place");
+    const evidence=a.waste>=1||a.cov>=.12||a.bulky.length||haz||bk||big;
+    if(!evidence)return {k:"none"};
+    if(reasons.length)return {k:"muni",reasons:reasons};
+    return {k:"nation"};
+  }
+  function render(){
+    const a=last;if(!a)return;const dd=decide(a),box=g("wdResult");
+    const size=a.cov>=.38||a.waste>=8?"Large":a.cov>=.2||a.waste>=3?"Medium":"Small";
+    const tags=[];
+    if(a.waste)tags.push(a.waste+" waste item"+(a.waste>1?"s":"")+" ("+Object.entries(a.kinds).map(x=>x[1]+" "+x[0]).join(", ")+")");
+    tags.push("waste covers about "+Math.round(a.cov*100)+"% of the photo");
+    if(a.bulky.length)tags.push("bulky: "+a.bulky.join(", "));
+    if(dd.k!=="none")tags.push("size: "+size);
+    const tg='<div class="wd-tags">'+tags.map(t=>"<span>"+t.replace(/[<>&]/g,"")+"</span>").join("")+"</div>";
+    const note=a.ai?"":'<p class="cs-note">The object detector could not load (no internet?). This result uses the photo only, so it is less exact.</p>';
+    if(dd.k==="none"){
+      box.innerHTML='<div class="wd-verdict wd-x"><h4>No garbage found</h4><p>The detector did not see a garbage problem in this photo. Move closer to the garbage and try again.</p></div>'+tg+note;return;
+    }
+    if(dd.k==="muni"){
+      box.innerHTML='<div class="wd-verdict wd-m"><h4>&#127963;&#65039; Reportable: the Municipal Community must solve this</h4><p>This is too big or unsafe for people to clean by themselves. Send it to the Municipal Community so a team removes it.</p></div>'+tg+
+        '<p style="font-size:.88rem;margin-bottom:.7rem"><b>Why:</b> '+dd.reasons.join("; ")+'.</p>'+
+        '<button type="button" class="btn btn-block" id="wdToMuni">Report to Municipal Community</button>'+note;
+      g("wdToMuni").onclick=()=>send("photo","report");return;
+    }
+    box.innerHTML='<div class="wd-verdict wd-n"><h4>&#129529; Solvable: the Nation Community can clean this</h4><p>This looks like small, safe litter. People in the area can pick it up themselves and put it in the nearest bin.</p></div>'+tg+
+      '<p style="font-size:.88rem;margin-bottom:.7rem"><b>Tips:</b> wear gloves, bag the waste, keep wet and dry waste apart, and use the nearest collection point on the Map screen. If it is bigger than it looks, tick the boxes on the left and the answer will change.</p>'+
+      '<button type="button" class="btn btn-block" id="wdToNation">Share with Nation Community</button>'+
+      '<button type="button" class="btn btn-ghost btn-block" id="wdToMuni2" style="margin-top:.5rem">I still want to report it to Municipal</button>'+note;
+    g("wdToNation").onclick=()=>send("natPhoto","nation");
+    g("wdToMuni2").onclick=()=>send("photo","report");
+  }
+  function send(inputId,screen){
+    if(!file)return;
+    try{
+      const dt=new DataTransfer();dt.items.add(file);const inp=g(inputId);inp.files=dt.files;inp.dispatchEvent(new Event("change",{bubbles:true}));
+      const pv=g(inputId==="photo"?"photoPreview":"natPhotoPreview");if(pv){pv.src=URL.createObjectURL(file);pv.style.display="block";}
+    }catch(e){}
+    showScreen(screen);
+  }
+  async function analyse(f){
+    file=f;last=null;const box=g("wdResult");
+    box.innerHTML='<p class="muted">Loading the detector and checking your photo&hellip;</p>';
+    const url=URL.createObjectURL(f);
+    try{
+      const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+      const cov=clutter(im);let dets=[],ai=false;
+      const M=await getModel();
+      if(M){try{dets=await M.detect(im,40,.35);ai=true;}catch(e){}}
+      const W=im.naturalWidth*im.naturalHeight,kinds={},bulky=[];let waste=0,person=0;
+      dets.forEach(d=>{
+        const ar=d.bbox[2]*d.bbox[3]/W;
+        if(WASTE.has(d.class)&&d.score>=.4){waste++;kinds[d.class]=(kinds[d.class]||0)+1;}
+        else if(BULKY.has(d.class)&&d.score>=.5&&ar>=.04&&!bulky.includes(d.class))bulky.push(d.class);
+        else if(d.class==="person"&&ar>.4)person=ar;
+      });
+      last={cov:person&&cov<.2?0:cov,waste:waste,kinds:kinds,bulky:bulky,ai:ai};
+      drawPrev(im,dets);g("wdHint").textContent="Green boxes are waste items. Orange boxes are bulky items.";
+      render();
+    }catch(e){box.innerHTML='<p class="muted">Could not read this photo. Please try another one.</p>';}
+    finally{URL.revokeObjectURL(url);}
+  }
+  g("wdCamBtn").onclick=()=>g("wdCam").click();
+  g("wdPickBtn").onclick=()=>g("wdPick").click();
+  ["wdCam","wdPick"].forEach(id=>g(id).addEventListener("change",e=>{const f=e.target.files[0];if(f)analyse(f);e.target.value="";}));
+  ["wdHaz","wdBulky","wdBig"].forEach(id=>g(id).addEventListener("change",render));
 })();
 </script>
 <script>
