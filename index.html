@@ -5,11 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>
 /* ===== YOUR SETTINGS - the ONLY place you need to edit =====
-   dbUrl         Firebase Realtime Database URL, e.g. https://my-app-default-rtdb.firebaseio.com (no trailing slash)
-   apiKey        Firebase "Web API key" (Project settings > General)
-   adminEmail    the email of the ONE admin account you create in Firebase Authentication
-   adminPassHash only if you skip Firebase login (demo passcode mode), see SETUP.md */
-window.CS_CONFIG = { dbUrl: "", apiKey: "", adminEmail: "", adminPassHash: "" };
+   apiKey / projectId  Firebase web config (Project settings > General > Your apps)
+   dbUrl, adminEmail, adminPassHash  not used any more (kept empty) */
+window.CS_CONFIG = { apiKey: "AIzaSyCgBfO52mgO-Dm4LQvr5_vMc1-suQIZKl0", projectId: "sindh-clean-547b1", dbUrl: "", adminEmail: "", adminPassHash: "" };
 </script>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -1773,22 +1771,123 @@ function shrink(f,max,q,cb){const rd=new FileReader();rd.onload=()=>{const im=ne
 $("photo").addEventListener("change",e=>{window.__shrunk=null;const f=e.target.files[0];if(f)shrink(f,800,.7,d=>{window.__shrunk=d;});});
 // ---- cloud sync (optional) ----
 const _sv=saveReports,_sl=saveLive;
-function cput(k,o){if(CS_DB_URL)fetch(CS_DB_URL+"/"+k+"/"+o.id+".json"+(window.__csToken?"?auth="+window.__csToken:""),{method:"PUT",body:JSON.stringify(o)}).catch(()=>{});}
-saveReports=function(a){const old=new Map(getReports().map(r=>[r.id,JSON.stringify(r)]));a.forEach(r=>{if(old.get(r.id)!==JSON.stringify(r)){r.upd=Date.now();cput("reports",r);}});_sv(a);};
+// ---- cloud sync: Firestore REST (reports = public, reportPrivate = staff only) ----
+const FS_PID=String((window.CS_CONFIG&&window.CS_CONFIG.projectId)||""),FS_KEY=String((window.CS_CONFIG&&window.CS_CONFIG.apiKey)||"");
+const FS_ON=!!(FS_PID&&FS_KEY);
+const FS_BASE="https://firestore.googleapis.com/v1/projects/"+FS_PID+"/databases/(default)/documents";
+async function fsReq(url,method,body,anon){
+  const go=()=>{const h={"Content-Type":"application/json"};if(!anon&&window.__csToken)h.Authorization="Bearer "+window.__csToken;return fetch(url+(url.indexOf("?")<0?"?":"&")+"key="+encodeURIComponent(FS_KEY),{method:method||"GET",headers:h,body:body==null?undefined:JSON.stringify(body)});};
+  let r=await go();
+  if(r.status===401&&!anon&&window.__csRefresh&&await window.__csRefresh())r=await go();
+  return r;
+}
+const fsS=v=>({stringValue:String(v)}),fsI=v=>({integerValue:String(Math.round(+v))}),fsD=v=>({doubleValue:+v});
+const fsNum=v=>v!=null&&v!==""&&Number.isFinite(+v);
+function fsDecode(f){const o={};for(const k in (f||{})){const v=f[k];o[k]="stringValue" in v?v.stringValue:"integerValue" in v?Number(v.integerValue):"doubleValue" in v?Number(v.doubleValue):"booleanValue" in v?v.booleanValue:null;}return o;}
+function fitPhoto(p){return new Promise(res=>{if(!p)return res("");if(p.length<=700000)return res(p);const im=new Image();im.onload=()=>{try{const s=Math.min(1,800/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*s|0;c.height=im.height*s|0;c.getContext("2d").drawImage(im,0,0,c.width,c.height);let o=c.toDataURL("image/jpeg",.6);if(o.length>900000)o=c.toDataURL("image/jpeg",.4);res(o.length>900000?"":o);}catch(e){res("");}};im.onerror=()=>res("");im.src=p;});}
+function fsPrivJson(r){const x={...r};delete x.photo;delete x.resolvedPhoto;return JSON.stringify(x);}
+async function fsCreate(r){
+  const id=String(r.id),photo=await fitPhoto(r.photo);
+  const pub={description:fsS(String(r.description||"").slice(0,950)),status:fsS("pending"),createdAt:fsI(r.ts||r.id),city:fsS(r.city||""),area:fsS(String(r.location||"").slice(0,300))};
+  if(fsNum(r.lat))pub.lat=fsD(r.lat);if(fsNum(r.lng))pub.lng=fsD(r.lng);if(photo)pub.photo=fsS(photo);
+  const a=await fsReq(FS_BASE+"/reports?documentId="+id,"POST",{fields:pub},true);
+  if(!a.ok&&a.status!==409)return false;
+  const b=await fsReq(FS_BASE+"/reportPrivate?documentId="+id,"POST",{fields:{id:fsI(r.id),ts:fsI(r.ts||r.id),json:fsS(fsPrivJson(r))}},true);
+  return b.ok||b.status===409;
+}
+async function fsUpdate(r){
+  const id=String(r.id),now=Date.now(),f={status:fsS(r.status||"pending"),upd:fsI(r.upd||now)};
+  if(r.resolvedAt)f.resolvedAt=fsI(r.resolvedAt);
+  if(r.resolvedPhoto){const rp=await fitPhoto(r.resolvedPhoto);if(rp)f.resolvedPhoto=fsS(rp);}
+  const m1=["status","upd","resolvedAt","resolvedPhoto"].map(x=>"updateMask.fieldPaths="+x).join("&");
+  const a=await fsReq(FS_BASE+"/reports/"+id+"?"+m1,"PATCH",{fields:f});
+  if(!a.ok)return false;
+  const m2=["id","ts","upd","json"].map(x=>"updateMask.fieldPaths="+x).join("&");
+  const b=await fsReq(FS_BASE+"/reportPrivate/"+id+"?"+m2,"PATCH",{fields:{id:fsI(r.id),ts:fsI(r.ts||r.id),upd:fsI(r.upd||now),json:fsS(fsPrivJson(r))}});
+  return b.ok;
+}
+const fsBusyIds=new Set();
+async function fsPush(t,r){
+  if(!FS_ON||fsBusyIds.has(r.id))return;fsBusyIds.add(r.id);
+  try{
+    const ok=t==="c"?await fsCreate(r):await fsUpdate(r);
+    if(ok&&t==="c"){const A=getReports(),x=A.find(z=>z.id===r.id);if(x){x.cs=1;try{_sv(A);}catch(e){}}}
+  }catch(e){}finally{fsBusyIds.delete(r.id);}
+}
+function cput(k,o){}
+saveReports=function(a){
+  const old=new Map(getReports().map(r=>[r.id,JSON.stringify(r)]));
+  const staff=!!(window.__csIsAdmin&&window.__csIsAdmin()),todo=[];
+  a.forEach(r=>{
+    const was=old.has(r.id);
+    if(was&&old.get(r.id)===JSON.stringify(r))return;
+    r.upd=Date.now();
+    if(!was){r.cs=0;todo.push(["c",r]);}else if(staff)todo.push(["u",r]);
+  });
+  _sv(a);
+  if(FS_ON)todo.forEach(x=>fsPush(x[0],x[1]));
+};
 saveLive=function(a){const k=new Set(getLive().map(s=>s.id));a.forEach(s=>{if(!k.has(s.id))cput("live",s);});return _sl(a);};
 function cleanR(r){const n=v=>Number.isFinite(+v)&&v!=null&&v!==""?+v:null;return {...r,id:Number(r.id),src:cl(r.src),name:cl(r.name),city:cl(r.city),location:cl(r.location),description:cl(r.description),email:cl(r.email),note:cl(r.note),date:cl(r.date),locationPrecision:cl(r.locationPrecision),photo:okImg(r.photo),resolvedPhoto:okImg(r.resolvedPhoto),status:["pending","inprogress","resolved"].includes(r.status)?r.status:"pending",lat:n(r.lat),lng:n(r.lng),ts:Number(r.ts)||Date.now(),upd:Number(r.upd)||0,resolvedAt:r.resolvedAt?Number(r.resolvedAt):undefined};}
+const FS_PUB_LITE=["city","area","description","lat","lng","status","createdAt","upd","resolvedAt","resolvedPhoto"];
+const fsGet=k=>{try{return +(localStorage.getItem(k)||0)||0;}catch(e){return 0;}};
+const fsSet=(k,v)=>{try{localStorage.setItem(k,String(v));}catch(e){}};
+async function fsQuery(coll,field,op,val,dir,limit,sel){
+  const q={from:[{collectionId:coll}],where:{fieldFilter:{field:{fieldPath:field},op:op,value:{integerValue:String(val)}}},orderBy:[{field:{fieldPath:field},direction:dir}],limit:limit};
+  if(sel)q.select={fields:sel.map(p=>({fieldPath:p}))};
+  const r=await fsReq(FS_BASE+":runQuery","POST",{structuredQuery:q});
+  if(!r.ok)return [];
+  const a=await r.json();
+  return (a||[]).filter(x=>x&&x.document).map(x=>({id:x.document.name.split("/").pop(),f:fsDecode(x.document.fields)}));
+}
+let fsPulling=false;
 async function cpull(){
-  if(!CS_DB_URL)return;
+  if(!FS_ON||fsPulling)return;fsPulling=true;
   try{
-    const R=await (await fetch(CS_DB_URL+"/reports.json")).json()||{}, V=await (await fetch(CS_DB_URL+"/live.json")).json()||{};
-    const m=new Map(getReports().map(r=>[r.id,r]));
-    Object.values(R).forEach(x=>{if(!x||!x.id)return;const c=cleanR(x),l=m.get(c.id);if(!l||c.upd>(l.upd||0))m.set(c.id,c);});
-    _sv([...m.values()].sort((a,b)=>repTs(b)-repTs(a)));
-    const lm=new Map(getLive().map(s=>[s.id,s]));
-    Object.values(V).forEach(x=>{if(!x)return;const s={id:Number(x.id),ts:Number(x.ts)||0,lat:+x.lat,lng:+x.lng,img:okImg(x.img)};if(s.id&&Number.isFinite(s.lat)&&Number.isFinite(s.lng)&&s.img)lm.set(s.id,s);});
-    _sl([...lm.values()].sort((a,b)=>b.ts-a.ts).slice(0,30));
+    const local=getReports(),staff=!!(window.__csIsAdmin&&window.__csIsAdmin());
+    if(!local.length)["cs_fs_c","cs_fs_u","cs_fs_pc","cs_fs_pu"].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+    const m=new Map(local.map(r=>[r.id,r]));
+    local.filter(r=>r.cs===0).forEach(r=>fsPush("c",r));
+    let mc=fsGet("cs_fs_c"),mu=fsGet("cs_fs_u");
+    const news=mc?await fsQuery("reports","createdAt","GREATER_THAN",mc,"ASCENDING",60):await fsQuery("reports","createdAt","GREATER_THAN",0,"DESCENDING",staff?100:40);
+    const chg=mu?await fsQuery("reports","upd","GREATER_THAN",mu,"ASCENDING",100,FS_PUB_LITE):[];
+    const toRep=(id,f)=>cleanR({id:Number(id),city:f.city||"",location:f.area||"",description:f.description||"",lat:f.lat,lng:f.lng,photo:f.photo||"",status:f.status,ts:f.createdAt,date:new Date(f.createdAt||Number(id)).toLocaleString(),upd:f.upd||0,resolvedAt:f.resolvedAt,resolvedPhoto:f.resolvedPhoto||"",cs:1});
+    news.forEach(d=>{const c=toRep(d.id,d.f),l=m.get(c.id);if(!l)m.set(c.id,c);else if(l.cs===0)l.cs=1;mc=Math.max(mc,d.f.createdAt||0);mu=Math.max(mu,d.f.upd||0);});
+    chg.forEach(d=>{
+      const c=toRep(d.id,d.f),l=m.get(c.id);mu=Math.max(mu,d.f.upd||0);
+      if(!l){m.set(c.id,c);return;}
+      if(c.upd>(l.upd||0)){
+        const n={...l,status:c.status,upd:c.upd,cs:1};
+        if(c.resolvedAt)n.resolvedAt=c.resolvedAt;else delete n.resolvedAt;
+        if(c.resolvedPhoto)n.resolvedPhoto=c.resolvedPhoto;else if(c.status!=="resolved")delete n.resolvedPhoto;
+        m.set(c.id,n);
+      }
+    });
+    if(!mu)mu=1;
+    let pc=fsGet("cs_fs_pc"),pu=fsGet("cs_fs_pu");
+    if(staff){
+      const pn=pc?await fsQuery("reportPrivate","ts","GREATER_THAN",pc,"ASCENDING",100):await fsQuery("reportPrivate","ts","GREATER_THAN",0,"DESCENDING",300);
+      const pch=pu?await fsQuery("reportPrivate","upd","GREATER_THAN",pu,"ASCENDING",100):[];
+      const mp=d=>{
+        pc=Math.max(pc,d.f.ts||0);pu=Math.max(pu,d.f.upd||0);
+        let j={};try{j=JSON.parse(d.f.json||"{}");}catch(e){return;}
+        j.id=Number(d.id);const c=cleanR(j),l=m.get(c.id);
+        if(!l){delete c.photo;c.cs=1;m.set(c.id,c);return;}
+        const keep={status:l.status,photo:l.photo,resolvedPhoto:l.resolvedPhoto,resolvedAt:l.resolvedAt,upd:l.upd,cs:1};
+        delete c.photo;delete c.resolvedPhoto;
+        m.set(c.id,Object.assign({},l,c,keep));
+      };
+      pn.forEach(mp);pch.forEach(mp);
+      if(!pu)pu=1;
+    }
+    const arr=[...m.values()].sort((a,b)=>repTs(b)-repTs(a));
+    try{_sv(arr);}catch(e){
+      arr.forEach((r,i)=>{if(i>=12){delete r.photo;delete r.resolvedPhoto;}});
+      try{_sv(arr);}catch(e2){arr.length=Math.min(arr.length,60);try{_sv(arr);}catch(e3){}}
+    }
+    fsSet("cs_fs_c",mc||1);fsSet("cs_fs_u",mu);if(staff){fsSet("cs_fs_pc",pc||1);fsSet("cs_fs_pu",pu);}
     refreshAll();refreshMapData();
-  }catch(e){}
+  }catch(e){}finally{fsPulling=false;}
 }
 // ---- shared report card ----
 function itemH(r,mu){
@@ -1823,7 +1922,7 @@ function renderNation(){
   const s=$("natCity");if(!s.options.length)s.innerHTML=SINDH.map(c=>`<option>${c.n}</option>`).join("");
   const L=getReports().filter(r=>r.src==="nation").slice(0,30);
   $("natFeed").innerHTML=L.length?L.map(r=>itemH(r,false)).join(""):'<p class="muted">No community reports yet. Be the first to share garbage info.</p>';
-  $("natSync").textContent=CS_DB_URL?"● shared live":"● this device only";
+  $("natSync").textContent=FS_ON?"● shared live":"● this device only";
 }
 $("natGps").onclick=()=>{
   const t=$("natGpsTxt");
@@ -1933,7 +2032,7 @@ function camPost(){
   postSighting(cv.toDataURL("image/jpeg",0.6));
 }
 $("camStartBtn").onclick=camStart;$("camStopBtn").onclick=camStop;$("camPostBtn").onclick=camPost;
-renderNation();renderMuni();cpull();setInterval(cpull,8000);
+renderNation();renderMuni();cpull();setInterval(()=>{if(!document.hidden)cpull();},30000);
 </script>
 <script>
 // ===== Clean Sindh v3: Fake-report detector =====
@@ -2574,7 +2673,7 @@ async function watch(sid){
 async function pollCams(){
   const box=g("liveCams"),adm=g("admin");
   if(!box||!adm||!adm.offsetParent)return;
-  if(!DB()){box.innerHTML='<div class="lc-head">\u{1F534} Live cameras</div><p class="muted">Live video needs the shared database: paste your Firebase Realtime Database URL into CS_DB_URL in index.html.</p>';return;}
+  if(!DB()){box.innerHTML='<div class="lc-head">\u{1F534} Live cameras</div><p class="muted">Live video is switched off in this version.</p>';return;}
   const all=await dbp("/livecams")||{},now=Date.now(),on=Object.values(all).filter(c=>c&&c.id&&now-c.hb<20000);
   if(!box.querySelector(".lc-head")){box.innerHTML='<div class="lc-head">\u{1F534} Live cameras</div><div class="lc-empty muted">Nobody is broadcasting right now.</div><div class="lc-grid"></div>';}
   const grid=box.querySelector(".lc-grid"),emp=box.querySelector(".lc-empty");
@@ -2783,7 +2882,7 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
   async function pollLive(){
     const box=g("pubLive");if(!box)return;
     if(!DB()){
-      box.innerHTML='<p class="muted">Live streaming needs the shared database. Put your Firebase Realtime Database URL in <b>CS_CONFIG.dbUrl</b> at the top of index.html, then streams from every phone will appear here.</p>';
+      box.innerHTML='<p class="muted">Live streaming is switched off in this version.</p>';
       liveList=[];drawLiveDots();return;
     }
     if(!onCamera())return;
@@ -3164,92 +3263,114 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 })();
 </script>
 <script>
-// ===== Admin & Municipal login =====
+// ===== Admin & Municipal login (Firebase Auth + staff/{uid} check in Firestore) =====
 (function(){
-  const FB_API_KEY = (window.CS_CONFIG && window.CS_CONFIG.apiKey) || "";
-  const ADMIN_EMAIL = (window.CS_CONFIG && window.CS_CONFIG.adminEmail) || "";
-  const ADMIN_PASS_HASH = (window.CS_CONFIG && window.CS_CONFIG.adminPassHash) || "";
-  const KEY = "cs_admin_session", GATED = ["admin", "municipal"];
-  let sess = null;
-  try { sess = JSON.parse(sessionStorage.getItem(KEY) || "null"); } catch (e) {}
-  const ok = () => !!(sess && sess.exp > Date.now());
-  if (!ok()) sess = null; else window.__csToken = sess.token || null;
-  window.__csIsAdmin = ok;
+  const API_KEY=(window.CS_CONFIG&&window.CS_CONFIG.apiKey)||"",PID=(window.CS_CONFIG&&window.CS_CONFIG.projectId)||"";
+  const KEY="cs_admin_session",GATED=["admin","municipal"];
+  let sess=null;
+  try{sess=JSON.parse(sessionStorage.getItem(KEY)||"null");}catch(e){}
+  const ok=()=>!!(sess&&sess.refresh);
+  window.__csToken=sess?sess.token||null:null;
+  window.__csIsAdmin=ok;
+  const save=()=>{try{sessionStorage.setItem(KEY,JSON.stringify(sess));}catch(e){}};
+  const $=id=>document.getElementById(id);
+
+  function wipePrivate(){
+    // remove staff-only data (phone/email/name) from this browser after logout
+    try{
+      const keep=getReports().filter(r=>r.cs===0);
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(keep));
+      ["cs_fs_c","cs_fs_u","cs_fs_pc","cs_fs_pu"].forEach(k=>localStorage.removeItem(k));
+    }catch(e){}
+  }
+  function logout(){
+    sess=null;window.__csToken=null;
+    try{sessionStorage.removeItem(KEY);}catch(e){}
+    wipePrivate();syncBtn();
+    try{showScreen("home");}catch(e){}
+    try{refreshAll();}catch(e){}
+    try{cpull();}catch(e){}
+  }
+  let rp=null;
+  window.__csRefresh=function(){
+    if(!sess||!sess.refresh)return Promise.resolve(false);
+    if(rp)return rp;
+    rp=fetch("https://securetoken.googleapis.com/v1/token?key="+API_KEY,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"grant_type=refresh_token&refresh_token="+encodeURIComponent(sess.refresh)})
+      .then(r=>r.json()).then(d=>{
+        if(d&&d.error){logout();return false;}
+        if(!d||!d.id_token)return false;
+        sess.token=d.id_token;sess.refresh=d.refresh_token||sess.refresh;sess.exp=Date.now()+(+d.expires_in||3600)*1000-60000;
+        window.__csToken=sess.token;save();return true;
+      }).catch(()=>false).finally(()=>{rp=null;});
+    return rp;
+  };
+  if(sess&&(!sess.exp||sess.exp<Date.now()+60000))window.__csRefresh();
+  setInterval(()=>{if(ok())window.__csRefresh();},45*60*1000);
 
   // modal
-  const box = document.createElement("div");
-  box.id = "csLogin";
-  box.style.cssText = "position:fixed;inset:0;background:rgba(8,24,17,.6);z-index:9000;display:none;align-items:center;justify-content:center;padding:1rem";
-  box.innerHTML = '<div class="card" style="max-width:380px;width:100%;margin:0">' +
-    '<h3>Admin login</h3><p id="csLoginNote" style="color:var(--muted);font-size:.85rem;margin:.3rem 0 .6rem"></p>' +
-    '<div id="csLoginEmailWrap"><label for="csLoginEmail">Email</label><input id="csLoginEmail" type="email" autocomplete="username"></div>' +
-    '<label for="csLoginPass" id="csLoginPassLbl">Password</label><input id="csLoginPass" type="password" autocomplete="current-password">' +
-    '<p id="csLoginErr" style="color:var(--danger);font-size:.85rem;min-height:1.2em;margin-top:.5rem"></p>' +
-    '<div style="display:flex;gap:.5rem;margin-top:.4rem"><button type="button" class="btn" id="csLoginGo">Log in</button>' +
+  const box=document.createElement("div");
+  box.id="csLogin";
+  box.style.cssText="position:fixed;inset:0;background:rgba(8,24,17,.6);z-index:9000;display:none;align-items:center;justify-content:center;padding:1rem";
+  box.innerHTML='<div class="card" style="max-width:380px;width:100%;margin:0">'+
+    '<h3>Municipal login</h3><p id="csLoginNote" style="color:var(--muted);font-size:.85rem;margin:.3rem 0 .6rem">Only authorised municipal staff can open this area.</p>'+
+    '<label for="csLoginEmail">Email</label><input id="csLoginEmail" type="email" autocomplete="username">'+
+    '<label for="csLoginPass">Password</label><input id="csLoginPass" type="password" autocomplete="current-password">'+
+    '<p id="csLoginErr" style="color:var(--danger);font-size:.85rem;min-height:1.2em;margin-top:.5rem"></p>'+
+    '<div style="display:flex;gap:.5rem;margin-top:.4rem"><button type="button" class="btn" id="csLoginGo">Log in</button>'+
     '<button type="button" class="btn btn-light" id="csLoginX">Cancel</button></div></div>';
   document.body.appendChild(box);
-  const $ = id => document.getElementById(id);
-  let target = "admin";
-  $("csLoginEmailWrap").style.display = FB_API_KEY ? "" : "none";
-  $("csLoginPassLbl").textContent = FB_API_KEY ? "Password" : "Admin passcode";
-  $("csLoginNote").textContent = FB_API_KEY ? "Only authorised municipal staff can open this area." : "Owner-only passcode login. Connect Firebase for a real account.";
-
-  function open(t) { target = t; $("csLoginErr").textContent = ""; $("csLoginPass").value = ""; box.style.display = "flex"; setTimeout(() => (FB_API_KEY ? $("csLoginEmail") : $("csLoginPass")).focus(), 50); }
-  function close() { box.style.display = "none"; }
-  function done(token, ms) {
-    sess = { token: token, exp: Date.now() + ms };
-    try { sessionStorage.setItem(KEY, JSON.stringify(sess)); } catch (e) {}
-    window.__csToken = token || null; close(); syncBtn(); showScreen(target);
+  let target="admin";
+  function open(t){target=t;$("csLoginErr").textContent="";$("csLoginPass").value="";box.style.display="flex";setTimeout(()=>$("csLoginEmail").focus(),50);}
+  function close(){box.style.display="none";}
+  function done(token,refresh,ms){
+    sess={token:token,refresh:refresh,exp:Date.now()+ms};save();
+    window.__csToken=token;close();syncBtn();
+    ["cs_fs_pc","cs_fs_pu"].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+    showScreen(target);
+    try{cpull();}catch(e){}
   }
-  async function login() {
-    const err = $("csLoginErr"); err.textContent = "";
-    const pass = $("csLoginPass").value;
-    if (!FB_API_KEY) {
-      if (!ADMIN_PASS_HASH) { err.textContent = "Admin is not set up yet. Follow the README."; return; }
-      if (!(window.crypto && crypto.subtle)) { err.textContent = "Open the site over https:// (or localhost) to log in."; return; }
-      const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("cleansindh:" + pass));
-      const h = Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, "0")).join("");
-      if (h === ADMIN_PASS_HASH.toLowerCase()) return done(null, 8 * 3600 * 1000);
-      err.textContent = "Wrong passcode."; return;
-    }
-    if (!ADMIN_EMAIL) { err.textContent = "Admin is not set up yet. Follow the README."; return; }
-    if ($("csLoginEmail").value.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase()) { err.textContent = "Login failed. Check email and password."; return; }
-    try {
-      const r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + FB_API_KEY, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: $("csLoginEmail").value.trim(), password: pass, returnSecureToken: true })
-      });
-      const d = await r.json();
-      if (!r.ok || !d.idToken) { err.textContent = "Login failed. Check email and password."; return; }
-      done(d.idToken, Math.max(60000, (+d.expiresIn || 3600) * 1000 - 60000));
-    } catch (e) { err.textContent = "Network error. Try again."; }
+  async function login(){
+    const err=$("csLoginErr");err.textContent="";
+    if(!API_KEY||!PID){err.textContent="Firebase is not configured in index.html.";return;}
+    const email=$("csLoginEmail").value.trim(),pass=$("csLoginPass").value;
+    if(!email||!pass){err.textContent="Enter email and password.";return;}
+    $("csLoginGo").disabled=true;
+    try{
+      const r=await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key="+API_KEY,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email,password:pass,returnSecureToken:true})});
+      const d=await r.json();
+      if(!r.ok||!d.idToken){err.textContent="Login failed. Check email and password.";return;}
+      const s=await fetch("https://firestore.googleapis.com/v1/projects/"+PID+"/databases/(default)/documents/staff/"+encodeURIComponent(d.localId)+"?key="+API_KEY,{headers:{Authorization:"Bearer "+d.idToken}});
+      if(!s.ok){err.textContent="This account is not registered as municipal staff ("+s.status+").";return;}
+      done(d.idToken,d.refreshToken,Math.max(60000,(+d.expiresIn||3600)*1000-60000));
+    }catch(e){err.textContent="Network error. Try again.";}
+    finally{$("csLoginGo").disabled=false;}
   }
-  $("csLoginGo").onclick = login;
-  $("csLoginX").onclick = close;
-  box.addEventListener("keydown", e => { if (e.key === "Enter") login(); if (e.key === "Escape") close(); });
+  $("csLoginGo").onclick=login;
+  $("csLoginX").onclick=close;
+  box.addEventListener("keydown",e=>{if(e.key==="Enter")login();if(e.key==="Escape")close();});
 
   // logout button
-  const out = document.createElement("button");
-  out.type = "button"; out.className = "btn btn-light"; out.textContent = "Log out"; out.style.display = "none";
-  const ta = document.querySelector(".top-actions") || document.querySelector(".topbar");
-  if (ta) ta.insertBefore(out, ta.firstChild);
-  function syncBtn() { out.style.display = ok() ? "" : "none"; }
-  out.onclick = () => { sess = null; window.__csToken = null; try { sessionStorage.removeItem(KEY); } catch (e) {} syncBtn(); showScreen("home"); };
+  const out=document.createElement("button");
+  out.type="button";out.className="btn btn-light";out.textContent="Log out";out.style.display="none";
+  const ta=document.querySelector(".top-actions")||document.querySelector(".topbar");
+  if(ta)ta.insertBefore(out,ta.firstChild);
+  function syncBtn(){out.style.display=ok()?"":"none";}
+  out.onclick=logout;
   syncBtn();
 
   // gate the screens
-  const _show = showScreen;
-  showScreen = function (id) {
-    if (GATED.includes(id) && !ok()) { open(id); return; }
-    return _show.apply(this, arguments);
+  const _show=showScreen;
+  showScreen=function(id){
+    if(GATED.includes(id)&&!ok()){open(id);return;}
+    return _show.apply(this,arguments);
   };
 
-  // gate the actions (blocks use from the console / old buttons too)
-  ["updateStatus", "removeResolvedPhoto", "addResolvedPhoto"].forEach(n => {
-    const f = window[n]; if (typeof f !== "function") return;
-    window[n] = function () {
-      if (!ok()) { alert("Admin login required."); open("admin"); return; }
-      return f.apply(this, arguments);
+  // gate the actions
+  ["updateStatus","removeResolvedPhoto","addResolvedPhoto"].forEach(n=>{
+    const f=window[n];if(typeof f!=="function")return;
+    window[n]=function(){
+      if(!ok()){alert("Admin login required.");open("admin");return;}
+      return f.apply(this,arguments);
     };
   });
 })();
